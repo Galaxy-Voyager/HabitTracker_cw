@@ -1,15 +1,35 @@
-[project]
+[tool.poetry]
 name = "habittracker-cw"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "Galaxy Voyager",email = "leheln16@gmail.com"}
-]
-requires-python = ">=3.11"
-dependencies = [
-]
+description = "Habit tracker based on Atomic Habits book"
+authors = ["Galaxy Voyager <leheln16@gmail.com>"]
+readme = "README.md"
+packages = [{include = "apps", from = "."}]
 
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+django = "~5.0.0"
+djangorestframework = "~3.15.0"
+djangorestframework-simplejwt = "~5.3.0"
+django-cors-headers = "~4.3.0"
+celery = "~5.3.0"
+redis = "~4.6.0"
+django-celery-beat = "~2.6.0"
+psycopg2-binary = "~2.9.9"
+python-dotenv = "~1.0.0"
+requests = "~2.31.0"
+django-filter = "~23.5.0"
+dj-database-url = "^3.1.0"
+python-telegram-bot = ">=21.0"
+pytz = "^2025.2"
+asgiref = "^3.11.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "~7.4.0"
+pytest-django = "~4.7.0"
+flake8 = "~7.0.0"
+black = "~24.1.0"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
