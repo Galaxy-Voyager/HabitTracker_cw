@@ -2,4 +2,5 @@
 pytest==7.4.4
 pytest-django==4.7.0
 flake8==7.0.0
-black==24.1.0pytest-cov==7.0.0
+black==24.1.0
+pytest-cov==7.0.0
