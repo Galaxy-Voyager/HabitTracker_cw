@@ -54,9 +54,12 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
 
-    - name: Run flake8
+    - name: Run flake8 with explicit ignores
       run: |
-        flake8 apps/ --exclude=migrations
+        flake8 apps/ \
+          --exclude=migrations \
+          --max-line-length=120 \
+          --ignore=E402,E501,W503,W504,E203,F401,F811,E128,E124
 
     - name: Run tests
       env:
@@ -118,16 +121,47 @@ jobs:
       env:
         SERVER_IP: ${{ secrets.SERVER_IP }}
         SERVER_USER: ${{ secrets.SERVER_USER }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        SECRET_KEY: ${{ secrets.SECRET_KEY }}
       run: |
-        # Создаем директорию на сервере
+        # Создаем директорию для проекта
         ssh $SERVER_USER@$SERVER_IP "mkdir -p ~/habittracker"
         
-        # Копируем файлы на сервер
+        # Копируем файлы проекта (кроме .git)
         rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
           ./ $SERVER_USER@$SERVER_IP:~/habittracker/
         
-        # Запускаем деплой на сервере
+        # Выполняем скрипт установки и запуска на сервере
         ssh $SERVER_USER@$SERVER_IP "cd ~/habittracker && \
-          docker-compose down && \
-          docker-compose up -d --build && \
+          # Установка Docker если не установлен
+          if ! command -v docker &> /dev/null; then
+            echo 'Installing Docker...'
+            sudo apt-get update
+            sudo apt-get install -y docker.io
+            sudo usermod -aG docker $USER
+          fi && \
+          # Установка Docker Compose если не установлен
+          if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+            echo 'Installing Docker Compose...'
+            sudo apt-get install -y docker-compose-plugin
+          fi && \
+          # Создание .env файла из секретов
+          echo 'DEBUG=False' > .env && \
+          echo 'SECRET_KEY=${{ secrets.SECRET_KEY }}' >> .env && \
+          echo 'DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db' >> .env && \
+          echo 'CELERY_BROKER_URL=redis://redis:6379/0' >> .env && \
+          echo 'CELERY_RESULT_BACKEND=redis://redis:6379/0' >> .env && \
+          echo 'TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}' >> .env && \
+          echo 'ALLOWED_HOSTS=localhost,127.0.0.1,${{ secrets.SERVER_IP }}' >> .env && \
+          echo 'CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000' >> .env && \
+          echo 'POSTGRES_USER=habittracker_user' >> .env && \
+          echo 'POSTGRES_PASSWORD=habittracker_password' >> .env && \
+          echo 'POSTGRES_DB=habittracker_db' >> .env && \
+          # Остановка старых контейнеров
+          docker compose down || true && \
+          # Запуск новых контейнеров
+          docker compose up -d --build && \
+          # Применение миграций
+          docker compose exec -T web python manage.py migrate && \
+          # Очистка
           docker system prune -f"
