@@ -115,7 +115,10 @@ jobs:
     - name: Add server to known_hosts
       run: |
         mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts 2>/dev/null
+        chmod 700 ~/.ssh
+        ssh-keyscan -H 158.160.3.59 >> ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts
+        echo "Known hosts added"
 
     - name: Deploy to server
       env:
