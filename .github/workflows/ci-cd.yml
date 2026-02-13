@@ -13,7 +13,6 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:15
@@ -28,7 +27,6 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-
       redis:
         image: redis:7
         options: >-
@@ -38,29 +36,21 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-
-    - name: Run flake8 with explicit ignores
+    - name: Run flake8
       run: |
-        flake8 apps/ \
-          --exclude=migrations \
-          --max-line-length=120 \
-          --ignore=E402,E501,W503,W504,E203,F401,F811,E128,E124
-
+        flake8 apps/ --exclude=migrations --max-line-length=120 --ignore=E402,E501,W503,W504,E203,F401,F811,E128,E124
     - name: Run tests
       env:
         DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
@@ -76,14 +66,11 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-
     - name: Build Docker image
       uses: docker/build-push-action@v5
       with:
@@ -93,7 +80,6 @@ jobs:
         tags: ${{ env.DOCKER_IMAGE }}:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
-
     - name: Test Docker image
       run: |
         docker run --rm ${{ env.DOCKER_IMAGE }}:latest python manage.py check
@@ -102,11 +88,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
     - name: Deploy to server
       env:
         SERVER_IP: ${{ secrets.SERVER_IP }}
@@ -115,15 +99,18 @@ jobs:
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
-        # Создаём ключ
-        echo "$SSH_PRIVATE_KEY" > /tmp/deploy_key
+        # Создаём временный файл с ключом
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
         chmod 600 /tmp/deploy_key
         
         # Копируем deploy.sh на сервер
-        scp -o StrictHostKeyChecking=no -i /tmp/deploy_key deploy.sh $SERVER_USER@$SERVER_IP:~/habittracker/
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/deploy_key \
+          deploy.sh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/deploy.sh
         
-        # Запускаем deploy.sh с параметрами
-        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key $SERVER_USER@$SERVER_IP \
-          "chmod +x ~/habittracker/deploy.sh && ~/habittracker/deploy.sh '$SECRET_KEY' '$TELEGRAM_BOT_TOKEN' '$SERVER_IP'"
+        # Запускаем deploy.sh на сервере с параметрами
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/deploy_key \
+          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
+          "bash ~/deploy.sh '${{ secrets.SECRET_KEY }}' '${{ secrets.TELEGRAM_BOT_TOKEN }}' '${{ secrets.SERVER_IP }}'"
         
+        # Удаляем временный ключ
         rm /tmp/deploy_key
