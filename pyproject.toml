@@ -1,4 +1,4 @@
-﻿[tool.poetry]
+[tool.poetry]
 name = "habittracker-cw"
 version = "0.1.0"
 description = "Habit tracker based on Atomic Habits book"
@@ -58,3 +58,7 @@ per-file-ignores = [
     "apps/telegram_bot/bot.py: E402",
     "apps/telegram_bot/handlers.py: E501"
 ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
