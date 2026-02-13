@@ -1,4 +1,4 @@
-﻿name: CI/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
@@ -95,13 +95,14 @@ jobs:
           ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
           "mkdir -p ~/habittracker"
         
-        # Копируем deploy.sh на сервер
-        scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-          deploy.sh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/habittracker/
+        # КОПИРУЕМ ВСЕ ФАЙЛЫ ПРОЕКТА (включая docker-compose.yml)
+        rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
+          -e "ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key" \
+          ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/habittracker/
         
         # Запускаем deploy.sh с параметрами
         ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key \
           ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
-          "chmod +x ~/habittracker/deploy.sh && ~/habittracker/deploy.sh '${{ secrets.SECRET_KEY }}' '${{ secrets.TELEGRAM_BOT_TOKEN }}' '${{ secrets.SERVER_IP }}'"
+          "chmod +x ~/habittracker/deploy.sh && cd ~/habittracker && ~/habittracker/deploy.sh '${{ secrets.SECRET_KEY }}' '${{ secrets.TELEGRAM_BOT_TOKEN }}' '${{ secrets.SERVER_IP }}'"
         
         rm /tmp/deploy_key
