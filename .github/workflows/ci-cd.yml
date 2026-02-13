@@ -84,6 +84,13 @@ jobs:
       run: |
         docker run --rm ${{ env.DOCKER_IMAGE }}:latest python manage.py check
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
     - name: Deploy to server
       run: |
         # Создаём ключ
@@ -95,12 +102,12 @@ jobs:
           ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
           "mkdir -p ~/habittracker"
         
-        # КОПИРУЕМ ВСЕ ФАЙЛЫ ПРОЕКТА (включая docker-compose.yml)
+        # КОПИРУЕМ ВСЕ ФАЙЛЫ ПРОЕКТА
         rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
           -e "ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key" \
           ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/habittracker/
         
-        # Запускаем deploy.sh с параметрами
+        # Запускаем deploy.sh
         ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key \
           ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
           "chmod +x ~/habittracker/deploy.sh && cd ~/habittracker && ~/habittracker/deploy.sh '${{ secrets.SECRET_KEY }}' '${{ secrets.TELEGRAM_BOT_TOKEN }}' '${{ secrets.SERVER_IP }}'"
