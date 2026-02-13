@@ -1,0 +1,147 @@
+﻿version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: habittracker_postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=habittracker_user
+      - POSTGRES_PASSWORD=habittracker_password
+      - POSTGRES_DB=habittracker_db
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U habittracker_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - habittracker_network
+
+  # Redis для Celery
+  redis:
+    image: redis:7-alpine
+    container_name: habittracker_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - habittracker_network
+
+  # Django приложение
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: habittracker_web
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn --bind 0.0.0.0:8000 config.wsgi:application"
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    expose:
+      - 8000
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=\
+      - DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - TELEGRAM_BOT_TOKEN=\
+      - ALLOWED_HOSTS=localhost,127.0.0.1,158.160.3.59
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - habittracker_network
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: habittracker_celery_worker
+    restart: unless-stopped
+    command: celery -A config worker -l info
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=\
+      - DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - TELEGRAM_BOT_TOKEN=\
+    depends_on:
+      - postgres
+      - redis
+      - web
+    networks:
+      - habittracker_network
+
+  # Celery Beat
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: habittracker_celery_beat
+    restart: unless-stopped
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=\
+      - DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - TELEGRAM_BOT_TOKEN=\
+    depends_on:
+      - postgres
+      - redis
+      - web
+    networks:
+      - habittracker_network
+
+  # Nginx
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: habittracker_nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    networks:
+      - habittracker_network
+
+# Volumes
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
+
+# Networks
+networks:
+  habittracker_network:
+    driver: bridge
