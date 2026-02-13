@@ -1,10 +1,10 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 echo "=== Habit Tracker Deployment Script ==="
 echo "Start time: $(date)"
 
-# Получаем параметры
+# ???????? ?????????
 SECRET_KEY=$1
 TELEGRAM_BOT_TOKEN=$2
 SERVER_IP=$3
@@ -14,34 +14,42 @@ echo "SERVER_IP: $SERVER_IP"
 echo "TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:0:10}..."
 echo "SECRET_KEY: ${SECRET_KEY:0:10}..."
 
-# Создаём директорию проекта
 mkdir -p ~/habittracker
 cd ~/habittracker
 
-# Копируем файлы проекта (если они ещё не скопированы)
-# В этом скрипте мы предполагаем, что файлы уже скопированы через SCP
-
-# Установка Docker если не установлен
 if ! command -v docker &> /dev/null; then
     echo "Installing Docker..."
     sudo apt-get update
     sudo apt-get install -y docker.io
+    sudo systemctl start docker
+    sudo systemctl enable docker
     sudo usermod -aG docker $USER
-    echo "Docker installed"
 else
-    echo "✅ Docker already installed"
+    echo "? Docker already installed"
 fi
 
-# Установка Docker Compose если не установлен
 if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
     echo "Installing Docker Compose..."
-    sudo apt-get install -y docker-compose-plugin
-    echo "Docker Compose installed"
+    sudo apt-get update
+    sudo apt-get install -y docker-compose-v2 || true
+
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        echo "Trying alternative installation method..."
+        sudo apt-get install -y ca-certificates curl
+        sudo install -m 0755 -d /etc/apt/keyrings
+        sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        sudo chmod a+r /etc/apt/keyrings/docker.asc
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y docker-compose-plugin
+    fi
 else
-    echo "✅ Docker Compose already installed"
+    echo "? Docker Compose already installed"
 fi
 
-# Создание .env файла
+echo "Docker version: $(docker --version)"
+echo "Docker Compose version: $(docker compose version || echo "not available")"
+
 echo "Creating .env file..."
 cat > .env << EOF
 DEBUG=False
@@ -57,32 +65,12 @@ POSTGRES_PASSWORD=habittracker_password
 POSTGRES_DB=habittracker_db
 EOF
 
-echo ".env file created:"
-cat .env | grep -v PASSWORD | grep -v TOKEN | grep -v KEY
-
-# Останавливаем старые контейнеры
-echo "Stopping old containers..."
 docker compose down || true
-
-# Запускаем новые контейнеры
-echo "Starting new containers..."
 docker compose up -d --build
-
-# Ждем запуска
-echo "Waiting for containers to start..."
 sleep 10
-
-# Применяем миграции
-echo "Applying migrations..."
 docker compose exec -T web python manage.py migrate
-
-# Проверяем статус
-echo "Container status:"
 docker compose ps
-
-# Проверяем работоспособность
-echo "Testing API..."
-curl -f http://localhost/api/public/ && echo "✅ API is responding" || echo "⚠️ API not responding yet"
+curl -f http://localhost/api/public/ && echo "? API is responding" || echo "?? API not responding yet"
 
 echo "=== Deployment completed! ==="
 echo "Application: http://$SERVER_IP"
