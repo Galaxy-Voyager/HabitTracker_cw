@@ -237,6 +237,11 @@ async def get_periodicity(update: Update,
     if periodicity_text == 'Ежедневно':
         context.user_data['periodicity'] = 'daily'
         context.user_data['day_of_week'] = None
+        await update.message.reply_text(
+            "Введите вознаграждение (или 'нет' если не нужно):\n"
+            "Например: Чашка кофе, Просмотр сериала, Сладость"
+        )
+        return REWARD
     else:
         context.user_data['periodicity'] = 'weekly'
         # Для еженедельных нужно будет спросить день недели
@@ -256,17 +261,23 @@ async def get_periodicity(update: Update,
         context.user_data['skip_reward'] = True
         return REWARD
 
-    await update.message.reply_text(
-        "Введите вознаграждение (или 'нет' если не нужно):\n"
-        "Например: Чашка кофе, Просмотр сериала, Сладость"
-    )
-
-    return REWARD
-
 
 async def get_reward(update: Update,
                      context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получаем вознаграждение"""
+    # Проверяем, нужно ли спрашивать день недели
+    if context.user_data.get('periodicity') == 'weekly' and 'day_of_week' not in context.user_data:
+        day_map = {
+            'Понедельник': 1, 'Вторник': 2, 'Среда': 3,
+            'Четверг': 4, 'Пятница': 5, 'Суббота': 6, 'Воскресенье': 7
+        }
+        context.user_data['day_of_week'] = day_map.get(update.message.text)
+        await update.message.reply_text(
+            "Введите вознаграждение (или 'нет' если не нужно):\n"
+            "Например: Чашка кофе, Просмотр сериала, Сладость"
+        )
+        return REWARD
+
     reward = update.message.text
     if reward.lower() == 'нет':
         context.user_data['reward'] = ''
@@ -458,12 +469,12 @@ async def help_command(update: Update,
         "/help - Эта справка\n\n"
         "Пример создания привычки:\n"
         "1. /create\n"
-        "2. Введите место (например: Дома)\n"
-        "3. Введите время (например: 09:00)\n"
-        "4. Введите действие (например: Читать книгу)\n"
+        "2. Введите место\n"
+        "3. Введите время (ЧЧ:ММ)\n"
+        "4. Введите действие\n"
         "5. Выберите периодичность\n"
         "6. Укажите вознаграждение\n\n"
-        "Бот будет отправлять напоминания в указанное время!"
+        "Бот будет отправлять напоминания!"
     )
 
     await update.message.reply_text(help_text)

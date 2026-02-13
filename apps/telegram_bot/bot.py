@@ -3,12 +3,12 @@ import django
 from telegram.ext import Application
 from dotenv import load_dotenv
 
-# Настройка Django - это должно быть после импортов, но до загрузки Django
+# Загрузка переменных окружения должна быть до настройки Django
+load_dotenv()
+
+# Настройка Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
-
-# Загрузка переменных окружения
-load_dotenv()
 
 # Импорт обработчиков после настройки Django
 from .handlers import setup_handlers
