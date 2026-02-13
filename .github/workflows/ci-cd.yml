@@ -84,33 +84,24 @@ jobs:
       run: |
         docker run --rm ${{ env.DOCKER_IMAGE }}:latest python manage.py check
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
     - name: Deploy to server
-      env:
-        SERVER_IP: ${{ secrets.SERVER_IP }}
-        SERVER_USER: ${{ secrets.SERVER_USER }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        SECRET_KEY: ${{ secrets.SECRET_KEY }}
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
-        # Создаём временный файл с ключом
+        # Создаём ключ
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
         chmod 600 /tmp/deploy_key
         
-        # Копируем deploy.sh на сервер
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/deploy_key \
-          deploy.sh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/deploy.sh
-        
-        # Запускаем deploy.sh на сервере с параметрами
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/deploy_key \
+        # СОЗДАЁМ ДИРЕКТОРИЮ на сервере
+        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key \
           ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
-          "bash ~/deploy.sh '${{ secrets.SECRET_KEY }}' '${{ secrets.TELEGRAM_BOT_TOKEN }}' '${{ secrets.SERVER_IP }}'"
+          "mkdir -p ~/habittracker"
         
-        # Удаляем временный ключ
+        # Копируем deploy.sh на сервер
+        scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          deploy.sh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/habittracker/
+        
+        # Запускаем deploy.sh с параметрами
+        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} \
+          "chmod +x ~/habittracker/deploy.sh && ~/habittracker/deploy.sh '${{ secrets.SECRET_KEY }}' '${{ secrets.TELEGRAM_BOT_TOKEN }}' '${{ secrets.SERVER_IP }}'"
+        
         rm /tmp/deploy_key
