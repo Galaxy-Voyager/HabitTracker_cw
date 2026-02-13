@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -11,8 +11,7 @@ from telegram.ext import (
 )
 from django.contrib.auth import get_user_model
 from apps.habits.models import Habit
-from datetime import datetime, time
-import pytz
+from datetime import datetime
 from asgiref.sync import sync_to_async
 
 # Настройка логгирования
@@ -31,11 +30,13 @@ User = get_user_model()
 # Асинхронные обертки для Django ORM
 @sync_to_async
 def get_user_by_chat_id(chat_id):
+    """Получить пользователя по chat_id"""
     return User.objects.filter(telegram_chat_id=chat_id).first()
 
 
 @sync_to_async
 def create_user(username, chat_id, password):
+    """Создать нового пользователя"""
     return User.objects.create_user(
         username=username,
         telegram_chat_id=chat_id,
@@ -45,20 +46,18 @@ def create_user(username, chat_id, password):
 
 @sync_to_async
 def get_user_habits(user):
+    """Получить привычки пользователя"""
     return list(Habit.objects.filter(user=user).order_by('time')[:10])
 
 
 @sync_to_async
-def get_public_habits():
-    return list(Habit.objects.filter(is_public=True).order_by('-created_at')[:5])
-
-
-@sync_to_async
-def create_habit(user, place, time, action, execution_time, periodicity, reward):
+def create_habit(user, place, habit_time, action, execution_time,
+                 periodicity, reward):
+    """Создать новую привычку"""
     return Habit.objects.create(
         user=user,
         place=place,
-        time=time,
+        time=habit_time,
         action=action,
         execution_time=execution_time,
         periodicity=periodicity,
@@ -67,11 +66,26 @@ def create_habit(user, place, time, action, execution_time, periodicity, reward)
     )
 
 
+@sync_to_async
+def get_public_habits_with_usernames():
+    """Получить публичные привычки с именами пользователей"""
+    habits = Habit.objects.filter(is_public=True).order_by('-created_at')[:5]
+    result = []
+    for habit in habits:
+        result.append({
+            'action': habit.action,
+            'username': habit.user.username,
+            'time': habit.time,
+            'place': habit.place,
+            'execution_time': habit.execution_time,
+            'periodicity': habit.periodicity
+        })
+    return result
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start"""
     user = update.effective_user
-
-    # Сохраняем пользователя в базе если его нет
     chat_id = str(update.effective_chat.id)
 
     try:
@@ -81,7 +95,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not django_user:
             # Создаем нового пользователя если не найден
             username = f"telegram_{user.username or user.id}"
-            django_user = await create_user(username, chat_id, os.urandom(16).hex())
+            django_user = await create_user(
+                username, chat_id, os.urandom(16).hex()
+            )
             message = (
                 f"Привет, {user.first_name}!\n"
                 f"Вы зарегистрированы в Habit Tracker!\n"
@@ -109,7 +125,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Произошла ошибка. Попробуйте позже.")
 
 
-async def create_habit_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def create_habit_start(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> int:
     """Начало создания привычки"""
     chat_id = str(update.effective_chat.id)
 
@@ -165,7 +182,8 @@ async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return TIME
 
 
-async def get_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_action(update: Update,
+                     context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получаем действие"""
     context.user_data['action'] = update.message.text
 
@@ -180,7 +198,8 @@ async def get_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return DURATION
 
 
-async def get_duration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_duration(update: Update,
+                       context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получаем продолжительность"""
     try:
         duration = int(update.message.text)
@@ -210,7 +229,8 @@ async def get_duration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return DURATION
 
 
-async def get_periodicity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_periodicity(update: Update,
+                          context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получаем периодичность"""
     periodicity_text = update.message.text
 
@@ -244,7 +264,8 @@ async def get_periodicity(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return REWARD
 
 
-async def get_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_reward(update: Update,
+                     context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получаем вознаграждение"""
     reward = update.message.text
     if reward.lower() == 'нет':
@@ -254,19 +275,21 @@ async def get_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # Подтверждение
     place = context.user_data.get('place', '')
-    time = context.user_data.get('time', '')
+    habit_time = context.user_data.get('time', '')
     action = context.user_data.get('action', '')
     execution_time = context.user_data.get('execution_time', 0)
     periodicity = context.user_data.get('periodicity', '')
     reward_text = context.user_data.get('reward', 'нет')
 
+    periodicity_text = 'ежедневно' if periodicity == 'daily' else 'еженедельно'
+
     summary = (
         f"ПОДТВЕРЖДЕНИЕ ПРИВЫЧКИ:\n\n"
         f"Место: {place}\n"
-        f"Время: {time}\n"
+        f"Время: {habit_time}\n"
         f"Действие: {action}\n"
         f"Длительность: {execution_time} сек.\n"
-        f"Периодичность: {periodicity}\n"
+        f"Периодичность: {periodicity_text}\n"
         f"Вознаграждение: {reward_text}\n\n"
         f"Все верно? (да/нет)"
     )
@@ -282,7 +305,8 @@ async def get_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return CONFIRM
 
 
-async def confirm_habit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def confirm_habit(update: Update,
+                        context: ContextTypes.DEFAULT_TYPE) -> int:
     """Подтверждение и создание привычки"""
     response = update.message.text.lower()
 
@@ -295,7 +319,7 @@ async def confirm_habit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             habit = await create_habit(
                 user=user,
                 place=context.user_data['place'],
-                time=context.user_data['time'],
+                habit_time=context.user_data['time'],
                 action=context.user_data['action'],
                 execution_time=context.user_data['execution_time'],
                 periodicity=context.user_data['periodicity'],
@@ -303,7 +327,10 @@ async def confirm_habit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
 
             # Преобразуем периодичность для читаемости
-            periodicity_text = 'ежедневно' if habit.periodicity == 'daily' else 'еженедельно'
+            periodicity_text = (
+                'ежедневно' if habit.periodicity == 'daily'
+                else 'еженедельно'
+            )
 
             await update.message.reply_text(
                 f"Привычка создана успешно!\n\n"
@@ -350,19 +377,27 @@ async def my_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user = await get_user_by_chat_id(chat_id)
         if not user:
-            await update.message.reply_text("Вы не зарегистрированы. Используйте /start")
+            await update.message.reply_text(
+                "Вы не зарегистрированы. Используйте /start"
+            )
             return
 
         habits = await get_user_habits(user)
 
         if not habits:
-            await update.message.reply_text("У вас пока нет привычек. Используйте /create чтобы создать первую!")
+            await update.message.reply_text(
+                "У вас пока нет привычек. "
+                "Используйте /create чтобы создать первую!"
+            )
             return
 
         message = "ВАШИ ПРИВЫЧКИ:\n\n"
 
         for i, habit in enumerate(habits, 1):
-            periodicity = 'ежедневно' if habit.periodicity == 'daily' else 'еженедельно'
+            periodicity = (
+                'ежедневно' if habit.periodicity == 'daily'
+                else 'еженедельно'
+            )
             reward = f"\n   Вознаграждение: {habit.reward}" if habit.reward else ""
 
             message += (
@@ -378,24 +413,8 @@ async def my_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Произошла ошибка.")
 
 
-@sync_to_async
-def get_public_habits_with_usernames():
-    """Получаем публичные привычки с именами пользователей"""
-    habits = Habit.objects.filter(is_public=True).order_by('-created_at')[:5]
-    result = []
-    for habit in habits:
-        result.append({
-            'action': habit.action,
-            'username': habit.user.username,
-            'time': habit.time,
-            'place': habit.place,
-            'execution_time': habit.execution_time,
-            'periodicity': habit.periodicity
-        })
-    return result
-
-
-async def public_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def public_habits(update: Update,
+                        context: ContextTypes.DEFAULT_TYPE) -> None:
     """Показать публичные привычки"""
     try:
         habits = await get_public_habits_with_usernames()
@@ -407,7 +426,10 @@ async def public_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         message = "ПУБЛИЧНЫЕ ПРИВЫЧКИ:\n\n"
 
         for i, habit in enumerate(habits, 1):
-            periodicity = 'ежедневно' if habit['periodicity'] == 'daily' else 'еженедельно'
+            periodicity = (
+                'ежедневно' if habit['periodicity'] == 'daily'
+                else 'еженедельно'
+            )
 
             message += (
                 f"{i}. {habit['action']}\n"
@@ -423,7 +445,8 @@ async def public_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Произошла ошибка.")
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def help_command(update: Update,
+                       context: ContextTypes.DEFAULT_TYPE) -> None:
     """Помощь"""
     help_text = (
         "HABIT TRACKER BOT - ПОМОЩЬ\n\n"
@@ -456,10 +479,18 @@ def setup_handlers(application: Application) -> None:
             PLACE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_place)],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
             ACTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_action)],
-            DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_duration)],
-            PERIODICITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_periodicity)],
-            REWARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_reward)],
-            CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_habit)],
+            DURATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_duration)
+            ],
+            PERIODICITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_periodicity)
+            ],
+            REWARD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_reward)
+            ],
+            CONFIRM: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_habit)
+            ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
