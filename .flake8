@@ -1,18 +1,7 @@
-﻿[flake8]
+[flake8]
 max-line-length = 120
-exclude = 
-    migrations,
-    __pycache__,
-    .git,
-    .venv,
-    env,
-    .env,
-    venv,
-    */migrations/*
-ignore = 
-    E402,
-    W503,
-    E203
-per-file-ignores =
+exclude = migrations, __pycache__, .git, .venv, env, .env, venv, */migrations/*
+ignore = E402, W503, E203
+per-file-ignores = 
     apps/telegram_bot/bot.py: E402
     apps/telegram_bot/handlers.py: E501

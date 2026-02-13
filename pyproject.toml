@@ -1,4 +1,4 @@
-[tool.poetry]
+﻿[tool.poetry]
 name = "habittracker-cw"
 version = "0.1.0"
 description = "Habit tracker based on Atomic Habits book"
@@ -29,7 +29,32 @@ pytest = "~7.4.0"
 pytest-django = "~4.7.0"
 flake8 = "~7.0.0"
 black = "~24.1.0"
+isort = "^7.0.0"
+mypy = "^1.19.1"
+pytest-cov = "^7.0.0"
+flake8-pyproject = "^1.2.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+[tool.flake8]
+max-line-length = 120
+exclude = [
+    "migrations",
+    "__pycache__",
+    ".git",
+    ".venv",
+    "env",
+    ".env",
+    "venv",
+    "*/migrations/*"
+]
+ignore = [
+    "E402",
+    "W503",
+    "E203"
+]
+per-file-ignores = [
+    "apps/telegram_bot/bot.py: E402",
+    "apps/telegram_bot/handlers.py: E501"
+]
