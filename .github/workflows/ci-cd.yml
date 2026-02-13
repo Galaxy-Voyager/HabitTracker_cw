@@ -151,14 +151,14 @@ jobs:
           fi
           
           echo "Creating .env file..."
-          cat > .env << "ENVFILE"
+          cat > .env << ENVFILE
 DEBUG=False
-SECRET_KEY=$SECRET_KEY
+SECRET_KEY=\$SECRET_KEY
 DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db
 CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/0
-TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
-ALLOWED_HOSTS=localhost,127.0.0.1,$SERVER_IP
+TELEGRAM_BOT_TOKEN=\$TELEGRAM_BOT_TOKEN
+ALLOWED_HOSTS=localhost,127.0.0.1,\$SERVER_IP
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 POSTGRES_USER=habittracker_user
 POSTGRES_PASSWORD=habittracker_password
