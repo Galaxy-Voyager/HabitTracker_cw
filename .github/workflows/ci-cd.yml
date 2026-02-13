@@ -151,7 +151,7 @@ jobs:
           fi
           
           echo "Creating .env file..."
-          cat > .env << ENVFILE
+          cat > .env << "ENVFILE"
 DEBUG=False
 SECRET_KEY=$SECRET_KEY
 DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db
