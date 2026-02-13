@@ -115,75 +115,15 @@ jobs:
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
-        # Создаем файл с ключом (правильно, с сохранением переносов строк)
-        cat > /tmp/deploy_key << 'EOF'
-        ${{ secrets.SSH_PRIVATE_KEY }}
-        EOF
+        # Создаём ключ
+        echo "$SSH_PRIVATE_KEY" > /tmp/deploy_key
         chmod 600 /tmp/deploy_key
         
-        # Проверяем SSH соединение
-        echo "Testing SSH connection..."
-        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key $SERVER_USER@$SERVER_IP "echo 'SSH connection successful'"
+        # Копируем deploy.sh на сервер
+        scp -o StrictHostKeyChecking=no -i /tmp/deploy_key deploy.sh $SERVER_USER@$SERVER_IP:~/habittracker/
         
-        # Создаем директорию на сервере
-        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key $SERVER_USER@$SERVER_IP "mkdir -p ~/habittracker"
+        # Запускаем deploy.sh с параметрами
+        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key $SERVER_USER@$SERVER_IP \
+          "chmod +x ~/habittracker/deploy.sh && ~/habittracker/deploy.sh '$SECRET_KEY' '$TELEGRAM_BOT_TOKEN' '$SERVER_IP'"
         
-        # Копируем файлы
-        rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
-          -e "ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key" \
-          ./ $SERVER_USER@$SERVER_IP:~/habittracker/
-        
-        # Выполняем деплой на сервере
-        ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key $SERVER_USER@$SERVER_IP << 'ENDSSH'
-          set -e
-          cd ~/habittracker
-          
-          echo "Installing Docker if needed..."
-          if ! command -v docker &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y docker.io
-            sudo usermod -aG docker $USER
-          fi
-          
-          echo "Installing Docker Compose if needed..."
-          if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-            sudo apt-get install -y docker-compose-plugin
-          fi
-          
-          echo "Creating .env file..."
-          cat > .env << ENVFILE
-DEBUG=False
-SECRET_KEY=$SECRET_KEY
-DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/0
-TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
-ALLOWED_HOSTS=localhost,127.0.0.1,$SERVER_IP
-CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-POSTGRES_USER=habittracker_user
-POSTGRES_PASSWORD=habittracker_password
-POSTGRES_DB=habittracker_db
-ENVFILE
-          
-          echo "Stopping old containers..."
-          docker compose down || true
-          
-          echo "Starting new containers..."
-          docker compose up -d --build
-          
-          echo "Waiting for containers to start..."
-          sleep 10
-          
-          echo "Running migrations..."
-          docker compose exec -T web python manage.py migrate
-          
-          echo "Cleaning up..."
-          docker system prune -f
-          
-          echo "Deployment complete!"
-          echo "Application: http://$SERVER_IP"
-ENDSSH
-        
-        # Удаляем ключ
         rm /tmp/deploy_key
-        echo "Deployment finished successfully"
