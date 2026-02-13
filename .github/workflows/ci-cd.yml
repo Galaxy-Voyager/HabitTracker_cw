@@ -127,15 +127,23 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
       run: |
-        # Создаем директорию для проекта
-        ssh $SERVER_USER@$SERVER_IP "mkdir -p ~/habittracker"
+        # Создаем временный файл с ключом
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/ssh_key
+        chmod 600 /tmp/ssh_key
         
-        # Копируем файлы проекта (кроме .git)
+        # Опции SSH с указанием ключа
+        SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/ssh_key"
+        
+        # Создаем директорию для проекта
+        ssh $SSH_OPTS $SERVER_USER@$SERVER_IP "mkdir -p ~/habittracker"
+        
+        # Копируем файлы на сервер
         rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
+          -e "ssh $SSH_OPTS" \
           ./ $SERVER_USER@$SERVER_IP:~/habittracker/
         
-        # Выполняем скрипт установки и запуска на сервере
-        ssh $SERVER_USER@$SERVER_IP "cd ~/habittracker && \
+        # Запускаем деплой на сервере
+        ssh $SSH_OPTS $SERVER_USER@$SERVER_IP "cd ~/habittracker && \
           # Установка Docker если не установлен
           if ! command -v docker &> /dev/null; then
             echo 'Installing Docker...'
@@ -148,7 +156,7 @@ jobs:
             echo 'Installing Docker Compose...'
             sudo apt-get install -y docker-compose-plugin
           fi && \
-          # Создание .env файла из секретов
+          # Создание .env файла
           echo 'DEBUG=False' > .env && \
           echo 'SECRET_KEY=${{ secrets.SECRET_KEY }}' >> .env && \
           echo 'DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db' >> .env && \
@@ -157,9 +165,6 @@ jobs:
           echo 'TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}' >> .env && \
           echo 'ALLOWED_HOSTS=localhost,127.0.0.1,${{ secrets.SERVER_IP }}' >> .env && \
           echo 'CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000' >> .env && \
-          echo 'POSTGRES_USER=habittracker_user' >> .env && \
-          echo 'POSTGRES_PASSWORD=habittracker_password' >> .env && \
-          echo 'POSTGRES_DB=habittracker_db' >> .env && \
           # Остановка старых контейнеров
           docker compose down || true && \
           # Запуск новых контейнеров
@@ -168,3 +173,6 @@ jobs:
           docker compose exec -T web python manage.py migrate && \
           # Очистка
           docker system prune -f"
+        
+        # Удаляем временный ключ
+        rm /tmp/ssh_key
