@@ -126,53 +126,22 @@ jobs:
         SERVER_USER: ${{ secrets.SERVER_USER }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
         # Создаем временный файл с ключом
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/ssh_key
+        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
         chmod 600 /tmp/ssh_key
         
-        # Опции SSH с указанием ключа
-        SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/ssh_key"
+        # Создаем директорию для проекта (простая команда для теста)
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/ssh_key $SERVER_USER@$SERVER_IP "mkdir -p ~/habittracker"
         
-        # Создаем директорию для проекта
-        ssh $SSH_OPTS $SERVER_USER@$SERVER_IP "mkdir -p ~/habittracker"
+        # Если до сюда дошли - SSH работает
+        echo "SSH connection successful"
         
-        # Копируем файлы на сервер
-        rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
-          -e "ssh $SSH_OPTS" \
-          ./ $SERVER_USER@$SERVER_IP:~/habittracker/
-        
-        # Запускаем деплой на сервере
-        ssh $SSH_OPTS $SERVER_USER@$SERVER_IP "cd ~/habittracker && \
-          # Установка Docker если не установлен
-          if ! command -v docker &> /dev/null; then
-            echo 'Installing Docker...'
-            sudo apt-get update
-            sudo apt-get install -y docker.io
-            sudo usermod -aG docker $USER
-          fi && \
-          # Установка Docker Compose если не установлен
-          if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-            echo 'Installing Docker Compose...'
-            sudo apt-get install -y docker-compose-plugin
-          fi && \
-          # Создание .env файла
-          echo 'DEBUG=False' > .env && \
-          echo 'SECRET_KEY=${{ secrets.SECRET_KEY }}' >> .env && \
-          echo 'DATABASE_URL=postgresql://habittracker_user:habittracker_password@postgres:5432/habittracker_db' >> .env && \
-          echo 'CELERY_BROKER_URL=redis://redis:6379/0' >> .env && \
-          echo 'CELERY_RESULT_BACKEND=redis://redis:6379/0' >> .env && \
-          echo 'TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}' >> .env && \
-          echo 'ALLOWED_HOSTS=localhost,127.0.0.1,${{ secrets.SERVER_IP }}' >> .env && \
-          echo 'CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000' >> .env && \
-          # Остановка старых контейнеров
-          docker compose down || true && \
-          # Запуск новых контейнеров
-          docker compose up -d --build && \
-          # Применение миграций
-          docker compose exec -T web python manage.py migrate && \
-          # Очистка
-          docker system prune -f"
+        # Копируем файлы (упрощенно для теста)
+        # rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
+        #   -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/ssh_key" \
+        #   ./ $SERVER_USER@$SERVER_IP:~/habittracker/
         
         # Удаляем временный ключ
         rm /tmp/ssh_key
