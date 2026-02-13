@@ -1,55 +1,84 @@
 ﻿#!/bin/bash
 
-# deploy.sh - скрипт для деплоя на сервере
+# deploy.sh - универсальный скрипт деплоя
 
 set -e
 
 echo "=== Habit Tracker Deployment Script ==="
 echo "Start time: $(date)"
 
+# Функция для установки Docker
+install_docker() {
+    echo "Installing Docker..."
+    sudo apt-get update
+    sudo apt-get install -y docker.io
+    sudo usermod -aG docker $USER
+    echo "Docker installed. Please log out and back in."
+}
+
+# Функция для установки Docker Compose
+install_docker_compose() {
+    echo "Installing Docker Compose..."
+    sudo apt-get install -y docker-compose-plugin
+}
+
+# Проверка и установка Docker
+if ! command -v docker &> /dev/null; then
+    install_docker
+else
+    echo "✅ Docker already installed"
+fi
+
+# Проверка Docker Compose
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    install_docker_compose
+else
+    echo "✅ Docker Compose already installed"
+fi
+
 # Переходим в директорию проекта
-cd ~/habittracker || { echo "Directory ~/habittracker not found!"; exit 1; }
+cd ~/habittracker || { 
+    echo "Creating project directory..."
+    mkdir -p ~/habittracker
+    cd ~/habittracker
+}
 
-# Обновляем код из репозитория
-echo "Updating code from repository..."
-git pull origin main
-
-# Проверяем наличие .env файла
+# Проверка наличия .env файла
 if [ ! -f .env ]; then
-    echo "Creating .env file from example..."
-    if [ -f env.example.txt ]; then
-        cp env.example.txt .env
-        echo "⚠️  Please update .env file with your actual values!"
-        echo "⚠️  Run: nano .env"
+    echo "❌ .env file not found! Creating from template..."
+    if [ -f .env.production.example ]; then
+        cp .env.production.example .env
+        echo "⚠️  Please edit .env file with your values!"
+        echo "Run: nano .env"
+        exit 1
     else
-        echo "❌ env.example.txt not found!"
+        echo "❌ No .env template found!"
         exit 1
     fi
 fi
 
-# Останавливаем контейнеры
-echo "Stopping containers..."
-docker compose down
+# Останавливаем старые контейнеры
+echo "Stopping old containers..."
+docker compose down || true
 
-# Пересобираем и запускаем
-echo "Building and starting containers..."
+# Запускаем новые контейнеры
+echo "Starting new containers..."
 docker compose up -d --build
 
-# Проверяем статус контейнеров
-echo "Checking container status..."
-sleep 5
+# Ждем запуска
+sleep 10
+
+# Применяем миграции
+echo "Applying migrations..."
+docker compose exec -T web python manage.py migrate
+
+# Проверяем статус
+echo "Container status:"
 docker compose ps
 
-# Проверяем, что веб-сервер отвечает
-echo "Checking web server response..."
-curl -f http://localhost/api/public/ || echo "⚠️  Web server not responding yet"
+# Проверяем работоспособность
+echo "Testing API..."
+curl -f http://localhost/api/public/ || echo "⚠️  API not responding yet"
 
-# Очищаем неиспользуемые образы
-echo "Cleaning up old images..."
-docker system prune -f
-
-echo "=== Deployment completed successfully! ==="
-echo "Application should be available at:"
-echo "  - http://158.160.3.59"
-echo "  - http://158.160.3.59/admin/"
-echo "Finish time: $(date)"
+echo "=== Deployment completed! ==="
+echo "Application: http://$(curl -s ifconfig.me)/"
