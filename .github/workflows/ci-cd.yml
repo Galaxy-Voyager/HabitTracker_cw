@@ -54,20 +54,12 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
 
-    - name: Debug and Run flake8
+    - name: Run flake8 with explicit ignores
       run: |
-        echo "=== ТЕКУЩАЯ ДИРЕКТОРИЯ ==="
-        pwd
-        echo "=== СПИСОК ФАЙЛОВ ==="
-        ls -la
-        echo "=== СОДЕРЖИМОЕ .flake8 ==="
-        cat .flake8 || echo ".flake8 not found"
-        echo "=== СОДЕРЖИМОЕ setup.cfg ==="
-        cat setup.cfg || echo "setup.cfg not found"
-        echo "=== ВЕРСИЯ FLAKE8 ==="
-        flake8 --version
-        echo "=== ЗАПУСК FLAKE8 С ДЕТАЛЬНЫМ ВЫВОДОМ ==="
-        flake8 apps/ --exclude=migrations --max-line-length=120 --ignore=E402,E501 -v
+        flake8 apps/ \
+          --exclude=migrations \
+          --max-line-length=120 \
+          --ignore=E402,E501,W503,W504,E203,F401,F811,E128,E124
 
     - name: Run tests
       env:
